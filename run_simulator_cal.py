@@ -33,6 +33,7 @@ datarelease="dx11_delta",
 input_cal = "DX11DSLOW",
 white_noise_scale = 1.,
 input_map_polarization = False,
+dipole_constraint = "sol_dip",
 )
 
 config_strings = []

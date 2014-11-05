@@ -9,7 +9,6 @@ import pandas as pd
 import rings
 import rings.calibration as rcal
 from planck import private
-import planck
 import pymongo
 import argparse
 
@@ -38,6 +37,7 @@ scale_sol_dip_straylight=1.,
 input_cal = "DX11D",
 white_noise_scale = 0.,
 input_map_polarization = False,
+dipole_constraint = False,
 )
 
 def t_or_f(arg):
@@ -93,18 +93,27 @@ if config["white_noise_scale"]:
 
 assert np.isnan(R.data.c).sum() == 0
 
+M = R.invert_invM(R.create_invM(R.data.index))
+
 hits_per_pp_series = R.data.hits.groupby(level="od").sum()
 hits_per_pp = np.array(hits_per_pp_series)
 R.pids = hits_per_pp_series.index
 del hits_per_pp_series
 
 if config["preremove_sol_dip"]:
-    signal_removed_sol_dip = R.remove_signal(R.data.conv_sol_dip)
+    signal_removed_sol_dip = R.remove_signal(R.data.conv_sol_dip, M=M)
     signal_removed_sol_dip /= rings.load_fits_gains("PSEU2", ch.tag, "DX10", by_ring=True).gain.reindex(signal_removed_sol_dip.index, level="od").fillna(method="ffill").fillna(method="bfill")
     if config["scale_sol_dip_straylight"]:
         signal_removed_sol_dip *= config["scale_sol_dip_straylight"]
     R.data.c -= signal_removed_sol_dip
     del signal_removed_sol_dip
+
+if config["dipole_constraint"]:
+    if config["dipole_constraint"].startswith("conv"):
+        _, dipole_map = R.destripe(R.data[config["dipole_constraint"]], maxiter=50, M=M)
+    else:
+        dipole_map = R.create_bin_map(R.data[config["dipole_constraint"]], M=M)
+    dipole_map_cond = R.compute_dipole_constraint_invcond(M, dipole_map)
 
 if not config["pencil"]:
     R.data.sol_dip[:] = R.data.conv_sol_dip
@@ -129,8 +138,8 @@ if config["straylight"]:
 if config["only_orb_dip"]:
     R.data.sol_dip[:] = 0 #R.data.tot_dip - R.data.sol_dip - R.data.orb_dip 
 
-R.data.sol_dip = R.remove_signal(R.data.sol_dip)
-R.data.orb_dip = R.remove_signal(R.data.orb_dip)
+R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M)
+R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M)
 
 if config["remove_polarization"]:
     print ("Remove polarization")
@@ -179,18 +188,19 @@ def store_results(iteration, gains, offsets, weights):
 store_results(0, out.g0, out.o0, np.ones_like(out.g0))
 g_prev = out.g0
 
+
 for outer_i in range(1, num_outer_iterations):
     print(("Iteration:", outer_i))
     #g_prev = pd.rolling_mean(outgains[outer_i-1], 5).fillna(method="bfill")
 
     if config["destripe"]:
-        m_prev_bin, m_prev, baselines = R.destripe(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip, return_baselines=True, maxiter=50)
+        m_prev_bin, m_prev, baselines = R.destripe(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip, return_baselines=True, maxiter=50, M=M)
         R.data.c[:] = R.remove_baselines(R.data.c, baselines * g_prev.reindex(baselines.index, level="od"))
     else:
-        m_prev_bin = R.create_bin_map(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip)
+        m_prev_bin = R.create_bin_map(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip, M=M)
         m_prev = m_prev_bin
-    RHS = rcal.create_RHS(R, g_prev, m_prev)
-    matvec = rcal.create_matvec(R, g_prev, m_prev)
+    RHS = rcal.create_RHS(R, g_prev, m_prev, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
+    matvec = rcal.create_matvec(R, g_prev, m_prev, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
     LinCalOperator = linalg.LinearOperator(shape=(2*n_ods, 2*n_ods), matvec=matvec, dtype=np.double)
     Dinv = rcal.create_Dinv(R, hits_per_pp, m_prev)
     Dinv = rcal.mult_det(Dinv)
