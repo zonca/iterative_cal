@@ -37,7 +37,7 @@ scale_sol_dip_straylight=1.,
 input_cal = "DX11D",
 white_noise_scale = 0.,
 input_map_polarization = False,
-dipole_constraint = False,
+dipole_constraint = "",
 )
 
 def t_or_f(arg):
