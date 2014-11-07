@@ -114,6 +114,9 @@ if config["dipole_constraint"]:
     else:
         dipole_map = R.create_bin_map(R.data[config["dipole_constraint"]], M=M)
     dipole_map_cond = R.compute_dipole_constraint_invcond(M, dipole_map)
+else:
+    dipole_map = None
+    dipole_map_cond = None
 
 if not config["pencil"]:
     R.data.sol_dip[:] = R.data.conv_sol_dip
