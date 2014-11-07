@@ -145,18 +145,6 @@ if not config["dipole_constraint"]:
     R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M)
 R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M)
 
-if config["remove_polarization"]:
-    print ("Remove polarization")
-    qw, uw = compute_pol_weigths(R.data["psi"])
-    folder = "/global/project/projectdirs/planck/data/mission/DPC_maps/dx10/lfi/BandPass_Corrected_Maps/"
-    if not config["nside"] == 256:
-        raise TypeError("remove_polarization works only at nside 256")
-    polarization_map = np.array(hp.read_map(folder + "LFI_SkyMap-bandpassCorrected_%03d_0256_DX10_full.fits" % ch.f.freq, (0,1,2), nest=True)) * 1e3
-    pol_ringsets =  pd.Series(polarization_map[1]).reindex(R.data.index, level="pix") * qw
-    pol_ringsets += pd.Series(polarization_map[2]).reindex(R.data.index, level="pix") * uw
-    pol_ringsets /= rings.load_fits_gains("PSEU2", ch.tag, "DX10", by_ring=True).gain.reindex(pol_ringsets.index, level="od").fillna(method="ffill").fillna(method="bfill")
-    R.data.c -= pol_ringsets
-    del polarization_map, qw, uw, pol_ringsets
 
 del R.data["psi"]
 
