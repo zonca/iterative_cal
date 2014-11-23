@@ -189,6 +189,9 @@ for outer_i in range(1, num_outer_iterations):
     else:
         m_prev_bin = R.create_bin_map(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip, M=M)
         m_prev = m_prev_bin
+
+    if config["dipole_constraint"]:
+        m_prev -= R.fit_mono_dipole(m_prev, M, dipole_map, dipole_map_cond)
     RHS = rcal.create_RHS(R, g_prev, m_prev, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
     matvec = rcal.create_matvec(R, g_prev, m_prev, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
     LinCalOperator = linalg.LinearOperator(shape=(2*n_ods, 2*n_ods), matvec=matvec, dtype=np.double)
