@@ -100,14 +100,6 @@ hits_per_pp = np.array(hits_per_pp_series)
 R.pids = hits_per_pp_series.index
 del hits_per_pp_series
 
-if config["preremove_sol_dip"]:
-    signal_removed_sol_dip = R.remove_signal(R.data.conv_sol_dip, M=M)
-    signal_removed_sol_dip /= rings.load_fits_gains("PSEU2", ch.tag, "DX10", by_ring=True).gain.reindex(signal_removed_sol_dip.index, level="od").fillna(method="ffill").fillna(method="bfill")
-    if config["scale_sol_dip_straylight"]:
-        signal_removed_sol_dip *= config["scale_sol_dip_straylight"]
-    R.data.c -= signal_removed_sol_dip
-    del signal_removed_sol_dip
-
 if config["dipole_constraint"]:
     if config["dipole_constraint"].startswith("conv"):
         _, dipole_map = R.destripe(R.data[config["dipole_constraint"]], maxiter=50, M=M)
