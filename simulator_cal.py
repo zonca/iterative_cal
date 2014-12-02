@@ -133,8 +133,8 @@ if config["straylight"]:
 if config["only_orb_dip"]:
     R.data.sol_dip[:] = 0 #R.data.tot_dip - R.data.sol_dip - R.data.orb_dip 
 
-#R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
-#R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
+R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
+R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
 
 del R.data["psi"]
 
