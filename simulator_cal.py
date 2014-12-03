@@ -38,6 +38,7 @@ input_cal = "DX11D",
 white_noise_scale = 0.,
 input_map_polarization = False,
 dipole_constraint = "",
+remove_dipoles_signal = False,
 )
 
 def t_or_f(arg):
@@ -77,22 +78,6 @@ R = rings.RingSetManager([ch.tag], config["nside"], tag=config["tag"], by_ring=T
 if config["mask_filename"]:
     R.apply_mask(config["mask_filename"] % ch.f.freq)
 
-if config["input_map"] == "":
-    R.data.c[:] = 0
-else:
-    input_map = np.array(hp.read_map(config["input_map"] % ch.f.freq, (0,1,2), nest=True)) * 1e3
-    R.data.c = pd.Series(input_map[0]).reindex(R.data.index, level="pix")
-    if config["input_map_polarization"]:
-        qw, uw = compute_pol_weigths(R.data["psi"])
-        R.data.c += pd.Series(input_map[1]).reindex(R.data.index, level="pix") * qw
-        R.data.c += pd.Series(input_map[2]).reindex(R.data.index, level="pix") * uw
-
-if config["white_noise_scale"]:
-    white_noise_sigma = ch.white_noise_sigma * 1e6
-    R.data.c += np.random.normal(size=len(R.data.hits)) * np.sqrt(white_noise_sigma * config["white_noise_scale"] / R.data.hits)
-
-assert np.isnan(R.data.c).sum() == 0
-
 M = R.invert_invM(R.create_invM(R.data.index))
 
 hits_per_pp_series = R.data.hits.groupby(level="od").sum()
@@ -109,6 +94,25 @@ if config["dipole_constraint"]:
 else:
     dipole_map = None
     dipole_map_cond = None
+
+if config["input_map"] == "":
+    R.data.c[:] = 0
+else:
+    input_map = np.array(hp.read_map(config["input_map"] % ch.f.freq, (0,1,2), nest=True)) * 1e3
+    if config["dipole_constraint"]:
+        input_map[0] -= R.fit_mono_dipole(pd.DataFrame({"I":input_map[0]}), M, dipole_map, dipole_map_cond)
+    R.data.c = pd.Series(input_map[0]).reindex(R.data.index, level="pix")
+    if config["input_map_polarization"]:
+        qw, uw = compute_pol_weigths(R.data["psi"])
+        R.data.c += pd.Series(input_map[1]).reindex(R.data.index, level="pix") * qw
+        R.data.c += pd.Series(input_map[2]).reindex(R.data.index, level="pix") * uw
+
+if config["white_noise_scale"]:
+    white_noise_sigma = ch.white_noise_sigma * 1e6
+    R.data.c += np.random.normal(size=len(R.data.hits)) * np.sqrt(white_noise_sigma * config["white_noise_scale"] / R.data.hits)
+
+assert np.isnan(R.data.c).sum() == 0
+
 
 if not config["pencil"]:
     R.data.sol_dip[:] = R.data.conv_sol_dip
@@ -133,8 +137,9 @@ if config["straylight"]:
 if config["only_orb_dip"]:
     R.data.sol_dip[:] = 0 #R.data.tot_dip - R.data.sol_dip - R.data.orb_dip 
 
-R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
-R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
+if config["remove_dipoles_signal"]:
+    R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
+    R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
 
 del R.data["psi"]
 
