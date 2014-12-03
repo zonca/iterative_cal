@@ -105,8 +105,6 @@ else:
                                     order_out="NESTED"
                                     )
                         ) * 1e3
-    #if config["dipole_constraint"]:
-    #    input_map[0] -= R.fit_mono_dipole(pd.DataFrame({"I":input_map[0]}), M, dipole_map, dipole_map_cond)
     R.data.c = pd.Series(input_map[0]).reindex(R.data.index, level="pix")
     if config["input_map_polarization"]:
         qw, uw = compute_pol_weigths(R.data["psi"])
