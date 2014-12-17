@@ -126,7 +126,10 @@ del R.data["conv_orb_dip"]
 
 R.data.c += R.data.sol_dip
 if config["scale_sol_dip_straylight"]:
-    R.data.c -= (1. - config["scale_sol_dip_straylight"]) * R.remove_signal(R.data.sol_dip)
+    sol_dip_straylight = R.remove_signal(R.data.sol_dip)
+    sol_dip_straylight -= sol_dip_straylight.mean()
+    R.data.c -= (1. - config["scale_sol_dip_straylight"]) * sol_dip_straylight
+    del sol_dip_straylight
 R.data.c += R.data.orb_dip
 
 print ("Decalibrate")
