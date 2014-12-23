@@ -138,9 +138,6 @@ R.data.c /= rings.load_fits_gains(config["input_cal"], ch.tag, "DX10", by_ring=T
 if config["straylight"]:
     R.data.orb_dip += R.data.straylight
 
-#cmb = pd.Series(1e3*hp.ud_grade(hp.read_map("cmb_only_%dGHz.fits" % ch.f.freq), nside))
-#R.data.c += cmb.reindex(R.data.index, level="pix")
-
 if config["only_orb_dip"]:
     R.data.sol_dip[:] = 0 #R.data.tot_dip - R.data.sol_dip - R.data.orb_dip 
 
