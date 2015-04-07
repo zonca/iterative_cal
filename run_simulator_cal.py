@@ -11,7 +11,7 @@ def make_config_string(c):
     return " ".join(["--%s='%s'" % (k,str(v)) for k,v in c.items()])
 
 config = dict( 
-nside = 64,
+nside = 128,
 #mask_filename = "largemask_%d.fits", # % ch.f.freq
 mask_filename = "/global/project/projectdirs/planck/software/zonca/dev/chi2cal/destripingmask_%d.fits",
 only_orb_dip = False,
@@ -21,7 +21,8 @@ precond = True,
 tag = "full",
 ddx9data = False,
 straylight = False,
-pencil = False,
+unknown_straylight = False,
+pencil = True,
 input_map = "/global/project/projectdirs/planck/data/mission/DPC_maps/dx11_delta/lfi/LFI_SkyMap_%03d_1024_DX11D_full.fits",
 #input_map = "",
 preremove_sol_dip=False,
@@ -30,10 +31,13 @@ init_dipole_fit=False,
 scale_sol_dip_straylight=1.,
 datarelease="dx11_delta",
 #input_cal = "DX11D",
-input_cal = "DX11DSLOW",
+input_cal = "DX11DDVV",
+#input_cal = "WAT1",
+#input_cal = "DX11DSLOW",
 white_noise_scale = 1.,
 input_map_polarization = False,
 dipole_constraint = "sol_dip",
+remove_dipoles_signal = False
 )
 
 config_strings = []
