@@ -8,7 +8,7 @@ from planck.pointing import compute_pol_weigths
 import pandas as pd
 import rings
 import rings.calibration as rcal
-from planck import private
+#from planck import private
 import pymongo
 import argparse
 
@@ -26,6 +26,7 @@ precond = True,
 tag = "full",
 ddx9data = False,
 straylight = False,
+unknown_straylight = False,
 pencil = True,
 input_map = "/global/project/projectdirs/planck/data/mission/DPC_maps/dx11_delta/lfi/LFI_SkyMap_%03d_1024_DX11D_full.fits",
 preremove_sol_dip=False,
@@ -36,10 +37,40 @@ datarelease="dx11_delta",
 input_cal = "DX11DSLOW",
 white_noise_scale = 1.,
 input_map_polarization = False,
+correct_main_beam_eff=False,
 dipole_constraint = "sol_dip",
 remove_dipoles_signal = False,
-chtag = "LFI28M",
 )
+
+config = {'nside': 128, 'input_cal': 'DX11DDVV', 'destripe': True, 'init_dipole_fit': False, 'ddx9data': False, 'dipole_constraint': '', 'input_map_polarization': False, 'correct_main_beam_eff': False, 'pencil': False, 'remove_dipoles_signal': False, 'precond': True, 'datarelease': 'dx11_delta', 'unknown_straylight': False, 'preremove_sol_dip': False, 'only_orb_dip': False, 'remove_polarization': False, 'straylight': False, 
+'input_map': '/global/project/projectdirs/planck/data/mission/DPC_maps/dx11_delta/lfi/LFI_SkyMap_%03d_1024_DX11D_full.fits', 'scale_sol_dip_straylight': 1.0, 'mask_filename': '/global/project/projectdirs/planck/software/zonca/dev/chi2cal/destripingmask_30.fits', 'tag': 'full', 'white_noise_scale': 0.0}
+config["chtag"] = "LFI28M"
+
+
+fsl_fractional_solid_angle = {
+"LFI18S": 0.62,
+"LFI18M": 0.38,
+"LFI19S": 0.58,
+"LFI19M": 0.6 ,
+"LFI20S": 0.7 ,
+"LFI20M": 0.63,
+"LFI21S": 0.7 ,
+"LFI21M": 0.59,
+"LFI22S": 0.5 ,
+"LFI22M": 0.44,
+"LFI23S": 0.43,
+"LFI23M": 0.35,
+"LFI24S": 0.15,
+"LFI24M": 0.15,
+"LFI25S": 0.06,
+"LFI25M": 0.08,
+"LFI26S": 0.05,
+"LFI26M": 0.08,
+"LFI27S": 0.76,
+"LFI27M": 0.64,
+"LFI28S": 0.83,
+"LFI28M": 0.62,
+}
 
 def t_or_f(arg):
     ua = str(arg).upper()
@@ -73,19 +104,18 @@ if not config["precond"]:
 else:
     prec = ""
 
-R = rings.RingSetManager([ch.tag], config["nside"], tag=config["tag"], by_ring=True, del_psi=False, ringsets_folder="/global/scratch2/sd/planck/user/zonca/data/ringsets_%s" % config["datarelease"])
+R = rings.RingSetManager(ch.tag, config["nside"], tag=config["tag"], by_ring=True, del_psi=False, ringsets_folder="/global/scratch2/sd/planck/user/zonca/data/ringsets_%s" % config["datarelease"], fixfactor=1e3)
 
 if config["mask_filename"]:
-    R.apply_mask(config["mask_filename"] % ch.f.freq)
+    try:
+        R.apply_mask(config["mask_filename"] % ch.f.freq)
+    except:
+        R.apply_mask(config["mask_filename"])
 
 M = R.invert_invM(R.create_invM(R.data.index))
 
-hits_per_pp_series = R.data.hits.groupby(level="od").sum()
-hits_per_pp = np.array(hits_per_pp_series)
-R.pids = hits_per_pp_series.index
-del hits_per_pp_series
-
 if config["dipole_constraint"]:
+    print("Dipole contraint setup")
     if config["dipole_constraint"].startswith("conv"):
         _, dipole_map = R.destripe(R.data[config["dipole_constraint"]], maxiter=50, M=M)
     else:
@@ -98,6 +128,7 @@ else:
 if config["input_map"] == "":
     R.data.c[:] = 0
 else:
+    print("Rescan input map")
     input_map = np.array(hp.ud_grade(
                                     hp.read_map(config["input_map"] % ch.f.freq, (0,1,2), nest=True),
                                     config["nside"],
@@ -105,11 +136,11 @@ else:
                                     order_out="NESTED"
                                     )
                         ) * 1e3
-    R.data.c = pd.Series(input_map[0]).reindex(R.data.index, level="pix")
+    R.data.c = pd.Series(input_map[0]).reindex(R.data.pix).values
     if config["input_map_polarization"]:
         qw, uw = compute_pol_weigths(R.data["psi"])
-        R.data.c += pd.Series(input_map[1]).reindex(R.data.index, level="pix") * qw
-        R.data.c += pd.Series(input_map[2]).reindex(R.data.index, level="pix") * uw
+        R.data.c += pd.Series(input_map[1]).reindex(R.data.pix).values * qw
+        R.data.c += pd.Series(input_map[2]).reindex(R.data.pix).values * uw
 
 if config["white_noise_scale"]:
     white_noise_sigma = ch.white_noise_sigma * 1e6
@@ -119,24 +150,36 @@ assert np.isnan(R.data.c).sum() == 0
 
 
 if not config["pencil"]:
-    R.data.sol_dip[:] = R.data.conv_sol_dip
-    R.data.orb_dip[:] = R.data.conv_orb_dip
+    R.data.sol_dip = R.data.conv_sol_dip
+    R.data.orb_dip = R.data.conv_orb_dip
 del R.data["conv_sol_dip"]
 del R.data["conv_orb_dip"]
 
-R.data.c += R.data.sol_dip
-if config["scale_sol_dip_straylight"]:
-    sol_dip_straylight = R.remove_signal(R.data.sol_dip)
+if config["scale_sol_dip_straylight"] != 1.: 
+    print("Scale sol dip straylight %.2f" % config["scale_sol_dip_straylight"])
+    sol_dip_mainbeam = R.create_bin_map(R.data.sol_dip, M)
+
+    sol_dip_straylight = R.remove_signal(R.data.sol_dip, bin_map=sol_dip_mainbeam)
     sol_dip_straylight -= sol_dip_straylight.mean()
-    R.data.c -= (1. - config["scale_sol_dip_straylight"]) * sol_dip_straylight
+    R.data.c += config["scale_sol_dip_straylight"] * sol_dip_straylight 
+
+    if config["correct_main_beam_eff"]:
+        main_beam_correction_factor = 1 + fsl_fractional_solid_angle[ch.tag]/100. * (1-config["scale_sol_dip_straylight"])
+        sol_dip_mainbeam *= main_beam_correction_factor
+        print("Scale main beam by %.4f" % (main_beam_correction_factor))
+    R.data.c += sol_dip_mainbeam.I.reindex(R.data.pix).values
     del sol_dip_straylight
+    del sol_dip_mainbeam
+else:
+    R.data.c += R.data.sol_dip
+
+if config["straylight"] and not config["unknown_straylight"]:
+    R.data.orb_dip += R.data.straylight
+
 R.data.c += R.data.orb_dip
 
 print ("Decalibrate")
-R.data.c /= rings.load_fits_gains(config["input_cal"], ch.tag, "DX10", by_ring=True).gain.reindex(R.data.index, level="od").fillna(method="ffill").fillna(method="bfill")
-
-if config["straylight"]:
-    R.data.orb_dip += R.data.straylight
+R.data.c /= rings.load_fits_gains(config["input_cal"], ch.tag, "DX10", by_ring=True).gain.reindex(R.data.index).fillna(method="ffill").fillna(method="bfill")
 
 if config["only_orb_dip"]:
     R.data.sol_dip[:] = 0 #R.data.tot_dip - R.data.sol_dip - R.data.orb_dip 
@@ -179,16 +222,17 @@ def store_results(iteration, gains, offsets, weights):
 store_results(0, out.g0, out.o0, np.ones_like(out.g0))
 g_prev = out.g0
 
+hits_per_pp = rings.sum_by(R.data.hits, R.data.index)
 
 for outer_i in range(1, num_outer_iterations):
     print(("Iteration:", outer_i))
     #g_prev = pd.rolling_mean(outgains[outer_i-1], 5).fillna(method="bfill")
 
     if config["destripe"]:
-        m_prev_bin, m_prev, baselines = R.destripe(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip, return_baselines=True, maxiter=50, M=M)
-        R.data.c[:] = R.remove_baselines(R.data.c, baselines * g_prev.reindex(baselines.index, level="od"))
+        m_prev_bin, m_prev, baselines = R.destripe(R.data.c / g_prev.reindex(R.data.index) - R.data.orb_dip - R.data.sol_dip, return_baselines=True, maxiter=50, M=M)
+        R.data.c[:] = R.remove_baselines(R.data.c, baselines * g_prev.reindex(baselines.index))
     else:
-        m_prev_bin = R.create_bin_map(R.data.c / g_prev.reindex(R.data.index, level="od") - R.data.orb_dip - R.data.sol_dip, M=M)
+        m_prev_bin = R.create_bin_map(R.data.c / g_prev.reindex(R.data.index) - R.data.orb_dip - R.data.sol_dip, M=M)
         m_prev = m_prev_bin
 
     if config["dipole_constraint"]:
