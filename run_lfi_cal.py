@@ -44,27 +44,33 @@ remove_dipoles_signal = False
 config_strings = []
 
 #config_strings.append(make_config_string(config))
+config["input_map"] = "data"
+config["input_cal"] = ""
 config["scale_sol_dip_straylight"] = 1.0
+config["dipole_constraint"] = ""
 config["correct_main_beam_eff"] = False
 config["mask_filename"] = "/global/project/projectdirs/planck/software/zonca/dev/chi2cal/destripingmask_30.fits"
-#config["input_conv_sol_dip"] = True
-#config["input_conv_orb_dip"] = True
+config["pencil"] = False
 config["straylight"] = False
 config["scale_straylight"] = 1
 #config_strings.append(make_config_string(config))
 config["unknown_straylight"] = False
-
-config["pencil"] = False
+config["remove_polarization"] = True
+config["remove_polarization_source"] = "CMDSHIFT"
 config["pencil_input"] = False
-#config["dipole_constraint"] = ""
-n = "S_DX11D_C"
+
+n = "calunc"
+config_strings.append((n, make_config_string(config)))
+
+config["dipole_constraint"] = "sol_dip"
+n = "calc"
 
 config_strings.append((n, make_config_string(config)))
 
 #for n in [1,2,3]:
-for name,config_string in config_strings:
+for name, config_string in config_strings:
     for freq in freqs:
         for ch in pl.f[freq].ch:
             #print("python simulator_cal.py --chtag {chtag} ".format(chtag=ch.tag) + config_string)
-            #if ch.tag == "LFI18M":
+            #if ch.tag in chs.keys():
              cluster.run_serial(name + "_%s" % ch.tag, "python simulator_cal.py --chtag {chtag} ".format(chtag=ch.tag) + config_string, mem=20)

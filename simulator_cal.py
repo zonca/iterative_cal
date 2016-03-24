@@ -8,9 +8,10 @@ from planck.pointing import compute_pol_weigths
 import pandas as pd
 import rings
 import rings.calibration as rcal
-#from planck import private
 import pymongo
+#from planck import private
 import argparse
+import gc
 
 parser = argparse.ArgumentParser(description='Iterative calibration')
 
@@ -44,7 +45,10 @@ remove_dipoles_signal = False,
 
 config = {'nside': 128, 'input_cal': 'DX11DDVV', 'destripe': True, 'init_dipole_fit': False, 'ddx9data': False, 'dipole_constraint': '', 'input_map_polarization': False, 'correct_main_beam_eff': False, 'pencil': False, 'remove_dipoles_signal': False, 'precond': True, 'datarelease': 'dx11_delta', 'unknown_straylight': False, 'preremove_sol_dip': False, 'only_orb_dip': False, 'remove_polarization': False, 'straylight': False, 
 'input_map': '/global/project/projectdirs/planck/data/mission/DPC_maps/dx11_delta/lfi/LFI_SkyMap_%03d_1024_DX11D_full.fits', 'scale_sol_dip_straylight': 1.0, 'mask_filename': '/global/project/projectdirs/planck/software/zonca/dev/chi2cal/destripingmask_30.fits', 'tag': 'full', 'white_noise_scale': 0.0}
+config["scale_straylight"] = 1.
 config["chtag"] = "LFI28M"
+config["remove_polarization_source"] = ""
+config["pencil_input"] = True
 
 
 fsl_fractional_solid_angle = {
@@ -127,7 +131,7 @@ else:
 
 if config["input_map"] == "":
     R.data.c[:] = 0
-else:
+elif not config["input_map"] == "data":
     print("Rescan input map")
     input_map = np.array(hp.ud_grade(
                                     hp.read_map(config["input_map"] % ch.f.freq, (0,1,2), nest=True),
@@ -142,44 +146,73 @@ else:
         R.data.c += pd.Series(input_map[1]).reindex(R.data.pix).values * qw
         R.data.c += pd.Series(input_map[2]).reindex(R.data.pix).values * uw
 
-if config["white_noise_scale"]:
-    white_noise_sigma = ch.white_noise_sigma * 1e6
-    R.data.c += np.random.normal(size=len(R.data.hits)) * np.sqrt(white_noise_sigma * config["white_noise_scale"] / R.data.hits)
-
 assert np.isnan(R.data.c).sum() == 0
 
+
+if not config["input_map"] == "data":
+
+
+    #if config["scale_sol_dip_straylight"] != 1.: 
+    #    print("Scale sol dip straylight %.2f" % config["scale_sol_dip_straylight"])
+    #    sol_dip_mainbeam = R.create_bin_map(R.data.sol_dip, M)
+
+    #    sol_dip_straylight = R.remove_signal(R.data.sol_dip, bin_map=sol_dip_mainbeam)
+    #    sol_dip_straylight -= sol_dip_straylight.mean()
+    #    R.data.c += config["scale_sol_dip_straylight"] * sol_dip_straylight 
+
+    #    if config["correct_main_beam_eff"]:
+    #        main_beam_correction_factor = 1 + fsl_fractional_solid_angle[ch.tag]/100. * (1-config["scale_sol_dip_straylight"])
+    #        sol_dip_mainbeam *= main_beam_correction_factor
+    #        print("Scale main beam by %.4f" % (main_beam_correction_factor))
+    #    R.data.c += sol_dip_mainbeam.I.reindex(R.data.pix).values
+    #    del sol_dip_straylight
+    #    del sol_dip_mainbeam
+    #else:
+
+    if config["pencil_input"]:
+        conv = ""
+    else:
+        conv = "conv_"
+
+    R.data.c += R.data[conv + "sol_dip"]
+    R.data.c += R.data[conv + "orb_dip"]
+
+    print("Galactic straylight")
+
+    try:
+        R.data["straylight"] *= config["scale_straylight"]
+    except:
+        pass
+
+    if config["straylight"]: # add to data
+        R.data.c += R.data.straylight
+        if not config["unknown_straylight"]: # add to model
+            R.data.orb_dip += R.data.straylight
+    # 4pi input and pencil calibration, need to correct by beam efficiency
+    if config["pencil"] and not config["pencil_input"]:
+        beam_eff = pd.read_hdf("beam_efficiency_correction_factors.h5", "data")[ch.tag]
+    else:
+        beam_eff = 1.
+    R.data.c *= beam_eff
+
+    if config["white_noise_scale"]:
+        white_noise_sigma = ch.white_noise_sigma * 1e6
+        R.data.c += np.random.normal(size=len(R.data.hits)) * np.sqrt(white_noise_sigma * config["white_noise_scale"] / R.data.hits)
 
 if not config["pencil"]:
     R.data.sol_dip = R.data.conv_sol_dip
     R.data.orb_dip = R.data.conv_orb_dip
-del R.data["conv_sol_dip"]
-del R.data["conv_orb_dip"]
 
-if config["scale_sol_dip_straylight"] != 1.: 
-    print("Scale sol dip straylight %.2f" % config["scale_sol_dip_straylight"])
-    sol_dip_mainbeam = R.create_bin_map(R.data.sol_dip, M)
-
-    sol_dip_straylight = R.remove_signal(R.data.sol_dip, bin_map=sol_dip_mainbeam)
-    sol_dip_straylight -= sol_dip_straylight.mean()
-    R.data.c += config["scale_sol_dip_straylight"] * sol_dip_straylight 
-
-    if config["correct_main_beam_eff"]:
-        main_beam_correction_factor = 1 + fsl_fractional_solid_angle[ch.tag]/100. * (1-config["scale_sol_dip_straylight"])
-        sol_dip_mainbeam *= main_beam_correction_factor
-        print("Scale main beam by %.4f" % (main_beam_correction_factor))
-    R.data.c += sol_dip_mainbeam.I.reindex(R.data.pix).values
-    del sol_dip_straylight
-    del sol_dip_mainbeam
-else:
-    R.data.c += R.data.sol_dip
-
-if config["straylight"] and not config["unknown_straylight"]:
-    R.data.orb_dip += R.data.straylight
-
-R.data.c += R.data.orb_dip
+try:
+    del R.data["conv_sol_dip"]
+    del R.data["conv_orb_dip"]
+    del R.data["straylight"]
+except:
+    pass
 
 print ("Decalibrate")
-R.data.c /= rings.load_fits_gains(config["input_cal"], ch.tag, "DX10", by_ring=True).gain.reindex(R.data.index).fillna(method="ffill").fillna(method="bfill")
+if config["input_cal"]:
+    R.data.c /= rings.load_fits_gains(config["input_cal"], ch.tag, "DX10", by_ring=True).gain.reindex(R.data.index).fillna(method="ffill").fillna(method="bfill")
 
 if config["only_orb_dip"]:
     R.data.sol_dip[:] = 0 #R.data.tot_dip - R.data.sol_dip - R.data.orb_dip 
@@ -187,6 +220,38 @@ if config["only_orb_dip"]:
 if config["remove_dipoles_signal"]:
     R.data.sol_dip = R.remove_signal(R.data.sol_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
     R.data.orb_dip = R.remove_signal(R.data.orb_dip, M=M, dipole_map=dipole_map, dipole_map_cond=dipole_map_cond)
+
+if config["remove_polarization"]:
+    def remove_pol(R):
+        qw, uw = compute_pol_weigths(R.data["psi"])
+        pol_ringsets = pd.Series(0, index=R.data.index)
+        pol_source = {
+        "CMD": dict(
+                folder = "/global/scratch2/sd/planck/user/peterm/commander_foregrounds/pol_default/",
+                comps = ["synch", "dust"],
+                to_mK = 1e-3,
+                filename = "{comp}_{freq:03d}-{short_tag}_k00000.fits"),
+        "CMDSHIFT": dict(
+                folder = "/global/scratch2/sd/planck/user/zonca/commander_pol_bshift/",
+                comps = ["synch", "dust"],
+                to_mK = 1e-3,
+                filename = "{comp}_{freq:03d}-{short_tag}_k00000.fits"),
+        "DPC" : dict(
+                folder = "/global/project/projectdirs/planck/data/mission/DPC_maps/dx11_delta/lfi/bandpass_corrected_maps_v2/",
+                comps = [""],
+                to_mK = 1e3,
+                filename = "DX11D_{freq:03d}_128_conv120_corrected_full_v2.fits")
+        }[config["remove_polarization_source"]]
+
+        for comp in pol_source["comps"]:
+            polarization_map = np.array(hp.ud_grade(hp.read_map(pol_source["folder"] + pol_source["filename"].format(comp=comp, freq=ch.f.freq, short_tag=ch.tag[3:], tag=ch.tag), (0,1,2), nest=True), config["nside"], order_in="NEST", order_out="NEST")) * pol_source["to_mK"]
+            for i,w in [(1, qw), (2, uw)]:
+                pol_ringsets += pd.Series(polarization_map[i]).reindex(R.data.pix).values * w
+
+        pol_ringsets /= rings.load_fits_gains("DX11D", ch.tag, "DX10", by_ring=True).gain.reindex(R.data.index).fillna(method="ffill").fillna(method="bfill")
+        R.data.c -= pol_ringsets
+    remove_pol(R)
+    gc.collect()
 
 del R.data["psi"]
 
@@ -222,7 +287,7 @@ def store_results(iteration, gains, offsets, weights):
 store_results(0, out.g0, out.o0, np.ones_like(out.g0))
 g_prev = out.g0
 
-hits_per_pp = rings.sum_by(R.data.hits, R.data.index)
+hits_per_pp = rings.sum_by(R.data.hits, R.data.index, target_index=R.pids)
 
 for outer_i in range(1, num_outer_iterations):
     print(("Iteration:", outer_i))
@@ -252,4 +317,4 @@ for outer_i in range(1, num_outer_iterations):
 
     g_prev = pd.Series(solution[n_ods:], index=R.pids)
     store_results(outer_i, g_prev, solution[:n_ods], 1./Dinv["11"])
-client.close()
+    client.close()
