@@ -1,0 +1,30 @@
+#!/bin/bash -l
+#SBATCH -p {QUEUE}
+#SBATCH -N {CORES:d}
+#SBATCH -t 00:{MINUTES}:00
+#SBATCH --job-name={JOB}_{TAG}
+#SBATCH --output=runs_{TAG}/{NAME}_stdouterr.log
+
+# CORES for Cori is the number of nodes
+
+export OMP_NUM_THREADS=8
+
+let ntask={CORES}*32/$OMP_NUM_THREADS
+
+echo "ntask=$ntask OMP_NUM_THREADS=$OMP_NUM_THREADS"
+
+madam=madam_toast
+echo `which $madam`
+
+ulimit -S -c 0
+
+echo "Processing {NAME}"
+
+srun -n $ntask -c $OMP_NUM_THREADS $madam madam_lfi.par \
+    runfile=runs_{TAG}/{RUN} \
+    file_root={NAME} \
+    write_map=T \
+    file_inmask=/project/projectdirs/planck/data/mission/SIAM/mask_madam_{FREQ}GHz.fits \
+    path_output=$SCRATCH/maps/{TAG} \
+    temperature_only={temperature_only} \
+    >& runs_{TAG}/{NAME}.log

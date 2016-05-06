@@ -1,0 +1,32 @@
+#!/bin/bash
+#PBS -q {QUEUE}
+#PBS -l mppwidth={CORES}
+#PBS -l walltime=00:{MINUTES}:00
+#PBS -N {JOB}_{TAG}
+#PBS -j oe
+#PBS -o runs_{TAG}/{NAME}_stdouterr.log
+#PBS -V
+
+export OMP_NUM_THREADS=2
+
+let ntask={CORES}/$OMP_NUM_THREADS
+
+echo "ntask=$ntask OMP_NUM_THREADS=$OMP_NUM_THREADS"
+
+madam=madam_toast
+echo `which $madam`
+
+cd $PBS_O_WORKDIR
+
+ulimit -S -c 0
+
+echo "Processing {NAME}"
+
+aprun -n $ntask -N 12 -S 6 -d 2 $madam madam_lfi.par \
+    runfile=runs_{TAG}/{RUN} \
+    file_root={NAME} \
+    write_map=T \
+    file_inmask=/project/projectdirs/planck/data/mission/SIAM/mask_madam_{FREQ}GHz.fits \
+    path_output=/scratch1/scratchdirs/zonca/maps/{TAG} \
+    temperature_only={temperature_only} \
+    >& runs_{TAG}/{NAME}.log

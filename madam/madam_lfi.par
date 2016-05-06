@@ -1,0 +1,52 @@
+runfile = 
+
+dist_by_obs = F
+write_cut = F
+basis_func = legendre
+basis_order = 0
+
+#read_buffer_len = 10000
+
+#nsubchunk = 2
+#isubchunk = 0
+
+path_output = maps
+file_root = dx11_delta
+write_map = T
+write_matrix = T
+write_hits = T
+#file_map = map.fits
+#file_hit = hit.fits
+#file_binmap = bin.fits
+#file_base = base.fits
+#file_matrix = matrix.fits
+#file_wcov = wcov.fits
+#file_mask = mask.fits
+file_inmask = /project/projectdirs/planck/data/mission/SIAM/mask_hfi_dx7_ns1024.fits
+
+info = 3
+
+mode_detweight = 2
+
+kfirst = T
+base_first = 1
+iter_min = 10
+iter_max = 100
+cglimit = 1e-12
+kfilter = T
+
+nside_submap = 32
+nside_cross = 1024
+run_submap_test = F
+precond_width = 100
+
+# temperature_only is written in the pbs script by qsub.py
+#temperature_only = F 
+
+pixmode_cross = 4
+pixlim_cross = 1e-3
+
+pixmode_map = 2
+pixlim_map = 1e-2
+
+bin_subsets = F
